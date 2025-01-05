@@ -1,6 +1,6 @@
 {
   "name": "com.yuukogames.usignals",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "displayName": "USignals",
   "description": "This package provides a simple and easy to use signal system for Unity.",
   "unity": "2022.3",

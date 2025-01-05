@@ -3,7 +3,6 @@ using System.Collections.Generic;
 
 namespace USignals
 {
-
     public interface ISignal
     {
         event Action OnChanged;
@@ -29,6 +28,11 @@ namespace USignals
             get => _value;
             set
             {
+                if (_computeFunc != null)
+                {
+                    throw new InvalidOperationException("Cannot set value on a computed signal");
+                }
+
                 if (!_isEvaluating && !EqualityComparer<T>.Default.Equals(_value, value))
                 {
                     _value = value;
