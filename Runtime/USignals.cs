@@ -1,18 +1,29 @@
 using System;
 using System.Collections.Generic;
-using System.Runtime.CompilerServices;
-using UnityEngine;
 
 namespace USignals
 {
-    public class Signal<T> : IDisposable
+
+    public interface ISignal
+    {
+        event Action OnChanged;
+    }
+
+    public class Signal<T> : IDisposable, ISignal
     {
         private T _value;
         private bool _isEvaluating = false;
         private readonly Func<T> _computeFunc;
-        public event Action OnChanged;
-        private readonly List<Signal<T>> _dependencies = new();
+        private readonly List<ISignal> _dependencies = new();
 
+        /// <summary>
+        /// Event that is triggered when the value of the signal changes.
+        /// </summary>
+        public event Action OnChanged;
+
+        /// <summary>
+        /// Value of the signal.
+        /// </summary>
         public T Value
         {
             get => _value;
@@ -21,25 +32,48 @@ namespace USignals
                 if (!_isEvaluating && !EqualityComparer<T>.Default.Equals(_value, value))
                 {
                     _value = value;
-                    NotifyChange();
+                    Refresh();
                 }
             }
         }
 
-        // Constructor for constant value signals
+        /// <summary>
+        /// Constructor for constant value signals
+        /// </summary>
+        /// <param name="initialValue">The initial value of the signal.</param>
         public Signal(T initialValue)
         {
             _value = initialValue;
         }
 
-        // Constructor for computed signals
-        public Signal(Func<T> computeFunc, params Signal<T>[] dependencies)
+        /// <summary>
+        /// Constructor for computed signals.
+        /// </summary>
+        /// <param name="computeFunc">The function that computes the value of the signal.</param>
+        /// <param name="dependencies">
+        ///     The signals that this signal depends on.<br /><br />
+        ///     It NEEDS to exist ATLEAST ONE DEPENDENCY on the computed signals.<br />
+        ///     When any of the dependencies change, the signal will be recomputed.<br /><br />
+        ///     The dependencies can be other types of signals,<br />
+        ///     for example this can be `Signal{int}` and a dependency be a `Signal{bool}`.
+        /// </param>
+        /// <exception cref="ArgumentNullException">If dependencies are null or empty</exception>
+        public Signal(Func<T> computeFunc, params ISignal[] dependencies)
         {
             _computeFunc = computeFunc;
 
+            if (dependencies?.Length == 0)
+            {
+                throw new ArgumentNullException("Dependencies cannot be null or empty");
+            }
+
             foreach (var dependency in dependencies)
             {
-                ValidateNoCircularDependency(dependency);
+                if (dependency == null)
+                {
+                    throw new ArgumentNullException("Dependency cannot be null");
+                }
+
                 _dependencies.Add(dependency);
                 dependency.OnChanged += Recompute;
             }
@@ -47,64 +81,64 @@ namespace USignals
             Recompute(computeFunc);
         }
 
+        /// <returns>The value as a string</returns>
         public override string ToString() => $"{Value}";
 
+        /// <summary>
+        /// Recomputes the value based on dependencies
+        /// </summary>
         private void Recompute()
         {
             Recompute(_computeFunc);
         }
 
-        // Recomputes the value based on dependencies
+        /// <summary>
+        /// Recomputes the value based on dependencies
+        /// </summary>
+        /// <param name="computeFunc">The function that computes the value of the signal.</param>
         private void Recompute(Func<T> computeFunc)
         {
             try
             {
                 _isEvaluating = true;
                 _value = computeFunc();
-                NotifyChange();
+                Refresh();
             }
             finally
             {
                 _isEvaluating = false;
             }
-
         }
 
-        // Triggers the OnChanged event
-        private void NotifyChange()
+        /// <summary>
+        /// Triggers the OnChanged event. It will notify all the child signals that depend on this signal.
+        /// </summary>
+        public void Refresh()
         {
             OnChanged?.Invoke();
         }
 
-        // Destructor
+        /// <summary>
+        /// Destructor
+        /// </summary>
         ~Signal()
         {
             Dispose();
         }
 
-        // Dispose the signal and clean dependencies
+        /// <summary>
+        /// Dispose the signal and clean dependencies.
+        /// </summary>
         public void Dispose()
         {
             foreach (var dependency in _dependencies)
             {
                 dependency.OnChanged -= Recompute;
             }
+
             _dependencies.Clear();
             OnChanged = null;
-        }
-
-        // Validates that no circular dependencies exist
-        private void ValidateNoCircularDependency(Signal<T> dependency)
-        {
-            if (dependency == this || _dependencies.Contains(dependency))
-            {
-                throw new InvalidOperationException("Circular dependency detected.");
-            }
-
-            foreach (var dep in dependency._dependencies)
-            {
-                ValidateNoCircularDependency(dep);
-            }
+            _value = default;
         }
     }
 }

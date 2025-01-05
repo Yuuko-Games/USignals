@@ -49,34 +49,93 @@ Debug.Log($"Displays the signal's value (int -> string): {signal.Value}");
 Debug.Log($"Displays the signal's value (string): {signal}");
 ```
 
-## Detecting loops
-
-If you create a loop in the signals, the package will throw an exception. For example:
+## Working with MonoBehaviour scripts
 
 ```csharp
-Signal<int> signalA = null;
-Signal<int> signalB = new Signal<int>(() => signalA.Value + 1);
+private void Awake()
+{
+    // Use to initialize the signals
+}
 
-signalA = new Signal<int>(() => signalB.Value + 1);
-
-Debug.Log(signalA.Value); // This will throw an Exception because of the circular reference
+private void Start()
+{
+    // Use it to subscribe to the OnChanged event, to ensure that the signals are ready
+}
 ```
 
-> [!WARNING]  
-> For this exact reason, it is REALLY RECOMMENDED to build readonly variables for the signals when working on MonoBehaviour scripts, and only update them values from the given API.
+### Example
+
+This is an example of how to use the signals in a MonoBehaviour script:
+
+Suppose you have a `PlayerHealth` script that holds the player's health and if it's dead or not.
+
+```csharp
+using UnityEngine;
+using USignals;
+
+public class PlayerHealth : MonoBehaviour
+{
+    // Initialize the value signal in the declaration
+    public readonly Signal<int> health = new(5);
+
+    // Initialize the function signal in the Awake method
+    public Signal<bool> isDead;
+
+    private void Awake()
+    {
+        // Use to initialize the signals
+        isDead = new Signal<bool>(() => health.Value <= 0, health);
+    }
+
+    // Imagine this is a damage event
+    private void Update()
+    {
+        if (Input.GetKeyDown(KeyCode.Space) && !isDead.Value)
+        {
+            health.Value--;
+        }
+    }
+}
+```
+
+In the `HealthDisplay` script, you can display the player's health and if the player is dead.
+
+```csharp
+using TMPro;
+using UnityEngine;
+
+public class HealthDisplay : MonoBehaviour
+{
+    [SerializeField] private PlayerHealth playerHealth;
+    [SerializeField] private TMP_Text healthText;
+    [SerializeField] private TMP_Text deadText;
+
+    private void Start()
+    {
+        playerHealth.health.OnChanged += () => healthText.text = $"{playerHealth.health}";
+        playerHealth.isDead.OnChanged += () => deadText.text = playerHealth.isDead.Value ? "Dead" : "Alive";
+    }
+}
+```
 
 ## Best practices
 
 Basically, you should never do this:
 
-- DON'T initialize the signals as `null`
-- DON'T assign the signals to a new Signal value after the initialization
+- DON'T `reassign` the signals to a new Signal value after the initialization.
 
-You should always do this:
+> [!WARNING]  
+> To avoid circular dependencies, it is REALLY RECOMMENDED to build readonly variables for the signals when working on MonoBehaviour scripts, and only update its values from the given API.
 
-- DO initialize the signals with a value or a function
-- DO use the signals as readonly variables when working on MonoBehaviour scripts
-- DO update the signals values from the given API (like `signal.Value = newValue`)
+You should do this:
+
+- DO initialize the signals with a `value` or a `function` that depends on other signals.
+- DO update the signals values from the given API like:
+
+```csharp
+signal.Value = newValue;
+```
+
 - You can check when a value changes by using the `OnChanged` event with:
 
 ```csharp
@@ -84,6 +143,11 @@ signal.OnChanged += () => {
     Debug.Log($"Signal value changed to: {signal.Value}");
 };
 ```
+
+- On MonoBehaviour scripts
+  - DO use the signals as `readonly` variables when working on MonoBehaviour scripts.
+  - DO initizalize the signals in the `Awake` method.
+  - DO subscribe to the `OnChanged` event in the `Start` method.
 
 ## License
 
