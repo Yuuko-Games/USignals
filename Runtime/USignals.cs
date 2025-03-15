@@ -5,7 +5,7 @@ namespace USignals
 {
     public interface ISignal
     {
-        event Action OnChanged;
+        event Action OnUpdated;
     }
 
     public class Signal<T> : IDisposable, ISignal
@@ -16,9 +16,20 @@ namespace USignals
         private readonly List<ISignal> _dependencies = new();
 
         /// <summary>
-        /// Event that is triggered when the value of the signal changes.
+        /// Event that is triggered when the value of the signal updates.
         /// </summary>
+        public event Action OnUpdated;
+
+        /// <summary>
+        /// Event that is triggered when the value of the signal value changes.
+        /// </summary>
+        public event Action OnUpdatedDistinct;
+
+        // Ignore event is never used warning
+#pragma warning disable CS0067
+        [Obsolete("Use OnUpdatedDistinct instead. This event is deprecated and it has no effect. It will be removed in future versions.", true)]
         public event Action OnChanged;
+#pragma warning restore CS0067
 
         /// <summary>
         /// Value of the signal.
@@ -33,10 +44,14 @@ namespace USignals
                     throw new InvalidOperationException("Cannot set value on a computed signal");
                 }
 
-                if (!_isEvaluating && !EqualityComparer<T>.Default.Equals(_value, value))
+                if (!_isEvaluating)
                 {
+                    bool isDifferent = !EqualityComparer<T>.Default.Equals(_value, value);
+
                     _value = value;
-                    Refresh();
+
+                    OnUpdated?.Invoke();
+                    if (isDifferent) OnUpdatedDistinct?.Invoke();
                 }
             }
         }
@@ -79,7 +94,7 @@ namespace USignals
                 }
 
                 _dependencies.Add(dependency);
-                dependency.OnChanged += Recompute;
+                dependency.OnUpdated += Recompute;
             }
 
             Recompute(computeFunc);
@@ -105,8 +120,13 @@ namespace USignals
             try
             {
                 _isEvaluating = true;
-                _value = computeFunc();
-                Refresh();
+                var finalValue = computeFunc();
+
+                bool isDifferent = !EqualityComparer<T>.Default.Equals(_value, finalValue);
+                _value = finalValue;
+
+                OnUpdated?.Invoke();
+                if (isDifferent) OnUpdatedDistinct?.Invoke();
             }
             finally
             {
@@ -115,11 +135,11 @@ namespace USignals
         }
 
         /// <summary>
-        /// Triggers the OnChanged event. It will notify all the child signals that depend on this signal.
+        /// Triggers the OnUpdated event. It will notify all the child signals that depend on this signal.
         /// </summary>
         public void Refresh()
         {
-            OnChanged?.Invoke();
+            OnUpdated?.Invoke();
         }
 
         /// <summary>
@@ -137,11 +157,12 @@ namespace USignals
         {
             foreach (var dependency in _dependencies)
             {
-                dependency.OnChanged -= Recompute;
+                dependency.OnUpdated -= Recompute;
             }
 
             _dependencies.Clear();
-            OnChanged = null;
+            OnUpdated = null;
+            OnUpdatedDistinct = null;
             _value = default;
         }
     }
