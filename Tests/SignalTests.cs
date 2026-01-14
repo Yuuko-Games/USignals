@@ -154,4 +154,28 @@ public class SignalTests
         Assert.AreEqual(25, signalC.Value);
         Assert.AreEqual(50, signalD.Value);
     }
+
+    [Test]
+    public void ComputedSignal_UpdateCompute_RecomputesAndUpdatesChildren()
+    {
+        var baseSignal = new Signal<int>(2);
+        var computedSignal = new Signal<int>(() => baseSignal.Value * 2, baseSignal);
+        var childSignal = new Signal<int>(() => computedSignal.Value + 1, computedSignal);
+
+        Assert.AreEqual(4, computedSignal.Value);
+        Assert.AreEqual(5, childSignal.Value);
+
+        computedSignal.UpdateCompute(() => baseSignal.Value * 3);
+
+        Assert.AreEqual(6, computedSignal.Value);
+        Assert.AreEqual(7, childSignal.Value);
+    }
+
+    [Test]
+    public void Signal_UpdateCompute_ThrowsOnValueSignal()
+    {
+        var signal = new Signal<int>(3);
+
+        Assert.Throws<InvalidOperationException>(() => signal.UpdateCompute(() => 10));
+    }
 }

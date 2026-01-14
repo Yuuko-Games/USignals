@@ -12,7 +12,7 @@ namespace USignals
     {
         private T _value;
         private bool _isEvaluating = false;
-        private readonly Func<T> _computeFunc;
+        private Func<T> _computeFunc;
         private readonly List<ISignal> _dependencies = new();
 
         /// <summary>
@@ -24,12 +24,6 @@ namespace USignals
         /// Event that is triggered when the value of the signal value changes.
         /// </summary>
         public event Action OnUpdatedDistinct;
-
-        // Ignore event is never used warning
-#pragma warning disable CS0067
-        [Obsolete("Use OnUpdatedDistinct instead. This event is deprecated and it has no effect. It will be removed in future versions.", true)]
-        public event Action OnChanged;
-#pragma warning restore CS0067
 
         /// <summary>
         /// Value of the signal.
@@ -140,6 +134,26 @@ namespace USignals
         public void Refresh()
         {
             OnUpdated?.Invoke();
+        }
+
+        /// <summary>
+        /// Updates the compute function for computed signals and recomputes the value.
+        /// </summary>
+        /// <param name="computeFunc">The new function that computes the value of the signal.</param>
+        public void UpdateCompute(Func<T> computeFunc)
+        {
+            if (_computeFunc == null)
+            {
+                throw new InvalidOperationException("Cannot update compute function on a non-computed signal");
+            }
+
+            if (computeFunc == null)
+            {
+                throw new ArgumentNullException(nameof(computeFunc));
+            }
+
+            _computeFunc = computeFunc;
+            Recompute(_computeFunc);
         }
 
         /// <summary>
