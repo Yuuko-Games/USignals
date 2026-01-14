@@ -3,17 +3,51 @@ using System.Collections.Generic;
 
 namespace USignals
 {
+    internal interface IComputedSignal
+    {
+        void RegisterDependency(ISignal dependency);
+        void ClearDependencies();
+        void EnsureHasDependencies();
+    }
+
+    internal static class SignalDependencyTracker
+    {
+        [ThreadStatic] private static Stack<IComputedSignal> _stack;
+
+        public static void Begin(IComputedSignal signal)
+        {
+            _stack ??= new Stack<IComputedSignal>();
+
+            _stack.Push(signal);
+        }
+
+        public static void End()
+        {
+            _stack.Pop();
+        }
+
+        public static void TrackDependency(ISignal dependency)
+        {
+            if (_stack == null || _stack.Count == 0)
+            {
+                return;
+            }
+
+            _stack.Peek().RegisterDependency(dependency);
+        }
+    }
+
     public interface ISignal
     {
         event Action OnUpdated;
     }
 
-    public class Signal<T> : IDisposable, ISignal
+    public class Signal<T> : IDisposable, ISignal, IComputedSignal
     {
         private T _value;
         private bool _isEvaluating = false;
         private Func<T> _computeFunc;
-        private readonly List<ISignal> _dependencies = new();
+        private readonly HashSet<ISignal> _dependencies = new();
 
         /// <summary>
         /// Event that is triggered when the value of the signal updates.
@@ -30,7 +64,11 @@ namespace USignals
         /// </summary>
         public T Value
         {
-            get => _value;
+            get
+            {
+                SignalDependencyTracker.TrackDependency(this);
+                return _value;
+            }
             set
             {
                 if (_computeFunc != null)
@@ -71,26 +109,14 @@ namespace USignals
         ///     for example this can be `Signal{int}` and a dependency be a `Signal{bool}`.
         /// </param>
         /// <exception cref="ArgumentNullException">If dependencies are null or empty</exception>
-        public Signal(Func<T> computeFunc, params ISignal[] dependencies)
+        public Signal(Func<T> computeFunc)
         {
+            if (computeFunc == null)
+            {
+                throw new ArgumentNullException(nameof(computeFunc));
+            }
+
             _computeFunc = computeFunc;
-
-            if (dependencies?.Length == 0)
-            {
-                throw new ArgumentNullException("Dependencies cannot be null or empty");
-            }
-
-            foreach (var dependency in dependencies)
-            {
-                if (dependency == null)
-                {
-                    throw new ArgumentNullException("Dependency cannot be null");
-                }
-
-                _dependencies.Add(dependency);
-                dependency.OnUpdated += Recompute;
-            }
-
             Recompute(computeFunc);
         }
 
@@ -111,10 +137,29 @@ namespace USignals
         /// <param name="computeFunc">The function that computes the value of the signal.</param>
         private void Recompute(Func<T> computeFunc)
         {
+            if (computeFunc == null)
+            {
+                throw new ArgumentNullException(nameof(computeFunc));
+            }
+
+            bool trackingDependencies = _computeFunc != null;
+
             try
             {
                 _isEvaluating = true;
+
+                if (trackingDependencies)
+                {
+                    ClearDependencies();
+                    SignalDependencyTracker.Begin(this);
+                }
+
                 var finalValue = computeFunc();
+
+                if (trackingDependencies)
+                {
+                    EnsureHasDependencies();
+                }
 
                 bool isDifferent = !EqualityComparer<T>.Default.Equals(_value, finalValue);
                 _value = finalValue;
@@ -124,6 +169,11 @@ namespace USignals
             }
             finally
             {
+                if (trackingDependencies)
+                {
+                    SignalDependencyTracker.End();
+                }
+
                 _isEvaluating = false;
             }
         }
@@ -169,15 +219,51 @@ namespace USignals
         /// </summary>
         public void Dispose()
         {
+            ClearDependencies();
+            OnUpdated = null;
+            OnUpdatedDistinct = null;
+            _value = default;
+        }
+
+        void IComputedSignal.RegisterDependency(ISignal dependency)
+        {
+            if (dependency == null || ReferenceEquals(dependency, this))
+            {
+                return;
+            }
+
+            if (_dependencies.Add(dependency))
+            {
+                dependency.OnUpdated += Recompute;
+            }
+        }
+
+        void IComputedSignal.ClearDependencies()
+        {
             foreach (var dependency in _dependencies)
             {
                 dependency.OnUpdated -= Recompute;
             }
 
             _dependencies.Clear();
-            OnUpdated = null;
-            OnUpdatedDistinct = null;
-            _value = default;
+        }
+
+        void IComputedSignal.EnsureHasDependencies()
+        {
+            if (_dependencies.Count == 0)
+            {
+                throw new InvalidOperationException("Computed signal must depend on at least one signal");
+            }
+        }
+
+        private void ClearDependencies()
+        {
+            ((IComputedSignal)this).ClearDependencies();
+        }
+
+        private void EnsureHasDependencies()
+        {
+            ((IComputedSignal)this).EnsureHasDependencies();
         }
     }
 }

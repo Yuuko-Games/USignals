@@ -11,8 +11,8 @@ public class ExampleUsage : MonoBehaviour
         Debug.Log($"Initial signalA value: {signalA.Value}");
         Debug.Log($"Initial signalB value: {signalB.Value}");
 
-        var signalC = new Signal<int>(() => signalA.Value + signalB.Value, signalA, signalB);
-        var signalD = new Signal<int>(() => signalC.Value * 2, signalC);
+        var signalC = new Signal<int>(() => signalA.Value + signalB.Value);
+        var signalD = new Signal<int>(() => signalC.Value * 2);
 
         Debug.Log($"Initial signalC value: {signalB.Value}"); // 15
         Debug.Log($"Initial signalD value: {signalD.Value}"); // 30

@@ -15,7 +15,7 @@ https://github.com/Yuuko-Games/USignals.git
 To use this package, you need to know the two types of signals that are available:
 
 - `Signal<T>(value)`: A signal that holds a value of type `T`.
-- `Signal<T>(func, signals)`: A signal that holds a value of type `T` that is calculated by a function that depends on other signals.
+- `Signal<T>(func)`: A signal that holds a value of type `T` that is calculated by a function that depends on other signals.
 
 ## Basic example code
 
@@ -26,8 +26,8 @@ var signalB = new Signal<int>(10);
 Debug.Log($"Initial signalA value: {signalA.Value}");
 Debug.Log($"Initial signalB value: {signalB.Value}");
 
-var signalC = new Signal<int>(() => signalA.Value + signalB.Value, signalA, signalB);
-var signalD = new Signal<int>(() => signalC.Value * 2, signalC);
+var signalC = new Signal<int>(() => signalA.Value + signalB.Value);
+var signalD = new Signal<int>(() => signalC.Value * 2);
 
 Debug.Log($"Initial signalC value: {signalB.Value}"); // 15
 Debug.Log($"Initial signalD value: {signalD.Value}"); // 30
@@ -84,7 +84,7 @@ public class PlayerHealth : MonoBehaviour
     private void Awake()
     {
         // Use to initialize the signals
-        isDead = new Signal<bool>(() => health.Value <= 0, health);
+        isDead = new Signal<bool>(() => health.Value <= 0);
     }
 
     // Imagine this is a damage event
