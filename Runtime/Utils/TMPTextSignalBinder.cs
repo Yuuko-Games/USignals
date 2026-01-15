@@ -12,9 +12,9 @@ namespace USignals
         [Tooltip("Signal asset used as a data source for the text.")]
         [SerializeField] private SignalAssetBase _source;
         [Tooltip("String.Format pattern. Use {0} to insert the signal value.")]
-        [SerializeField] private string _format = "{0}";
+        [SerializeField] private readonly string _format = "{0}";
         [Tooltip("When true, updates only when the value changes; otherwise on every update.")]
-        [SerializeField] private bool _useChangedEvent = true;
+        [SerializeField] private readonly bool _useChangedEvent = true;
 
         private TMP_Text _text;
 

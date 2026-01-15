@@ -10,9 +10,9 @@ namespace USignals
         [Tooltip("Bool signal asset used as the active state source.")]
         [SerializeField] private BoolSignalAsset _source;
         [Tooltip("Invert the signal value before applying it to GameObject.SetActive.")]
-        [SerializeField] private bool _invert;
+        [SerializeField] private readonly bool _invert;
         [Tooltip("When true, updates only when the value changes; otherwise on every update.")]
-        [SerializeField] private bool _useChangedEvent = true;
+        [SerializeField] private readonly bool _useChangedEvent = true;
 
         private void OnEnable()
         {

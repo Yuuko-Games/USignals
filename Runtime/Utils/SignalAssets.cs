@@ -30,7 +30,7 @@ namespace USignals
     public abstract class SignalAsset<T> : SignalAssetBase
     {
         [Tooltip("Initial value used when the asset is first accessed or enabled.")]
-        [SerializeField] private T _initialValue;
+        [SerializeField] private readonly T _initialValue;
         private Signal<T> _signal;
 
         /// <summary>
