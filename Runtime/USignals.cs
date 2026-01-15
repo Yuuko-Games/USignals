@@ -50,14 +50,14 @@ namespace USignals
         private readonly HashSet<ISignal> _dependencies = new();
 
         /// <summary>
-        /// Event that is triggered when the value of the signal updates.
+        /// Event that is triggered when the value of the signal updates (even if unchanged).
         /// </summary>
         public event Action OnUpdated;
 
         /// <summary>
-        /// Event that is triggered when the value of the signal value changes.
+        /// Event that is triggered when the value of the signal changes.
         /// </summary>
-        public event Action OnUpdatedDistinct;
+        public event Action OnChanged;
 
         /// <summary>
         /// Value of the signal.
@@ -83,7 +83,7 @@ namespace USignals
                     _value = value;
 
                     OnUpdated?.Invoke();
-                    if (isDifferent) OnUpdatedDistinct?.Invoke();
+                    if (isDifferent) OnChanged?.Invoke();
                 }
             }
         }
@@ -165,7 +165,7 @@ namespace USignals
                 _value = finalValue;
 
                 OnUpdated?.Invoke();
-                if (isDifferent) OnUpdatedDistinct?.Invoke();
+                if (isDifferent) OnChanged?.Invoke();
             }
             finally
             {
@@ -221,7 +221,7 @@ namespace USignals
         {
             ClearDependencies();
             OnUpdated = null;
-            OnUpdatedDistinct = null;
+            OnChanged = null;
             _value = default;
         }
 

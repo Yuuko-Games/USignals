@@ -43,12 +43,12 @@ public class SignalTests
     }
 
     [Test]
-    public void Signal_TriggersOnUpdatedDistinctOnlyOnChange()
+    public void Signal_TriggersOnChangedOnlyOnChange()
     {
         var signal = new Signal<int>(1);
         bool eventTriggered = false;
 
-        signal.OnUpdatedDistinct += () => eventTriggered = true;
+        signal.OnChanged += () => eventTriggered = true;
         signal.Value = 1; // No change, event should not trigger
         Assert.IsFalse(eventTriggered);
 
@@ -99,7 +99,7 @@ public class SignalTests
     }
 
     [Test]
-    public void ComputedSignal_OnUpdatedDistinct_TriggersCorrectly()
+    public void ComputedSignal_OnChanged_TriggersCorrectly()
     {
         var signal = new Signal<int>(2);
         var computedSignal = new Signal<int>(() => signal.Value % 2);
@@ -107,8 +107,8 @@ public class SignalTests
         bool signalDistinctTriggered = false;
         bool computedDistinctTriggered = false;
 
-        signal.OnUpdatedDistinct += () => signalDistinctTriggered = true;
-        computedSignal.OnUpdatedDistinct += () => computedDistinctTriggered = true;
+        signal.OnChanged += () => signalDistinctTriggered = true;
+        computedSignal.OnChanged += () => computedDistinctTriggered = true;
 
         signal.Value = 4; // Same computed value, should not trigger computedDistinct
         Assert.IsTrue(signalDistinctTriggered);
