@@ -75,6 +75,37 @@ public class SignalTests
     }
 
     [Test]
+    public void ComputedSignal_ThrowsOnSelfCircularDependency()
+    {
+        var source = new Signal<int>(1);
+        var signal = new Signal<int>(() => source.Value + 1);
+
+        Assert.Throws<InvalidOperationException>(() => signal.UpdateCompute(() => signal.Value + 1));
+
+        Assert.AreEqual(2, signal.Value);
+
+        source.Value = 2;
+        Assert.AreEqual(3, signal.Value);
+    }
+
+    [Test]
+    public void ComputedSignal_ThrowsOnCircularDependencyUpdate()
+    {
+        var seed = new Signal<int>(0);
+        var signalB = new Signal<int>(() => seed.Value + 1);
+        var signalA = new Signal<int>(() => signalB.Value + 1);
+
+        Assert.Throws<InvalidOperationException>(() => signalB.UpdateCompute(() => signalA.Value + 1));
+
+        Assert.AreEqual(1, signalB.Value);
+        Assert.AreEqual(2, signalA.Value);
+
+        seed.Value = 2;
+        Assert.AreEqual(3, signalB.Value);
+        Assert.AreEqual(4, signalA.Value);
+    }
+
+    [Test]
     public void Signal_Refresh_TriggersOnUpdated()
     {
         var signal = new Signal<int>(5);

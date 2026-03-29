@@ -10,6 +10,11 @@ namespace USignals
         void EnsureHasDependencies();
     }
 
+    internal interface IDependencyGraphNode
+    {
+        bool DependsOn(ISignal target, HashSet<ISignal> visited);
+    }
+
     internal static class SignalDependencyTracker
     {
         [ThreadStatic] private static Stack<IComputedSignal> _stack;
@@ -42,12 +47,15 @@ namespace USignals
         event Action OnUpdated;
     }
 
-    public class Signal<T> : IDisposable, ISignal, IComputedSignal
+    public class Signal<T> : IDisposable, ISignal, IComputedSignal, IDependencyGraphNode
     {
+        private const string CircularDependencyMessage = "Circular dependency detected";
+
         private T _value;
         private bool _isEvaluating = false;
         private Func<T> _computeFunc;
         private readonly HashSet<ISignal> _dependencies = new();
+        private HashSet<ISignal> _pendingDependencies;
 
         /// <summary>
         /// Event that is triggered when the value of the signal updates (even if unchanged).
@@ -116,8 +124,9 @@ namespace USignals
                 throw new ArgumentNullException(nameof(computeFunc));
             }
 
+            var evaluation = Evaluate(computeFunc, trackingDependencies: true);
             _computeFunc = computeFunc;
-            Recompute(computeFunc);
+            ApplyEvaluation(evaluation.finalValue, evaluation.dependencies);
         }
 
         /// <returns>The value as a string</returns>
@@ -142,40 +151,8 @@ namespace USignals
                 throw new ArgumentNullException(nameof(computeFunc));
             }
 
-            bool trackingDependencies = _computeFunc != null;
-
-            try
-            {
-                _isEvaluating = true;
-
-                if (trackingDependencies)
-                {
-                    ClearDependencies();
-                    SignalDependencyTracker.Begin(this);
-                }
-
-                var finalValue = computeFunc();
-
-                if (trackingDependencies)
-                {
-                    EnsureHasDependencies();
-                }
-
-                bool isDifferent = !EqualityComparer<T>.Default.Equals(_value, finalValue);
-                _value = finalValue;
-
-                OnUpdated?.Invoke();
-                if (isDifferent) OnChanged?.Invoke();
-            }
-            finally
-            {
-                if (trackingDependencies)
-                {
-                    SignalDependencyTracker.End();
-                }
-
-                _isEvaluating = false;
-            }
+            var evaluation = Evaluate(computeFunc, trackingDependencies: _computeFunc != null);
+            ApplyEvaluation(evaluation.finalValue, evaluation.dependencies);
         }
 
         /// <summary>
@@ -202,8 +179,9 @@ namespace USignals
                 throw new ArgumentNullException(nameof(computeFunc));
             }
 
+            var evaluation = Evaluate(computeFunc, trackingDependencies: true);
             _computeFunc = computeFunc;
-            Recompute(_computeFunc);
+            ApplyEvaluation(evaluation.finalValue, evaluation.dependencies);
         }
 
         /// <summary>
@@ -222,20 +200,29 @@ namespace USignals
             ClearDependencies();
             OnUpdated = null;
             OnChanged = null;
+            _pendingDependencies = null;
             _value = default;
         }
 
         void IComputedSignal.RegisterDependency(ISignal dependency)
         {
-            if (dependency == null || ReferenceEquals(dependency, this))
+            if (dependency == null)
             {
                 return;
             }
 
-            if (_dependencies.Add(dependency))
+            if (ReferenceEquals(dependency, this))
             {
-                dependency.OnUpdated += Recompute;
+                throw new InvalidOperationException(CircularDependencyMessage);
             }
+
+            if (dependency is IDependencyGraphNode dependencyNode &&
+                dependencyNode.DependsOn(this, new HashSet<ISignal>()))
+            {
+                throw new InvalidOperationException(CircularDependencyMessage);
+            }
+
+            (_pendingDependencies ?? _dependencies).Add(dependency);
         }
 
         void IComputedSignal.ClearDependencies()
@@ -250,10 +237,105 @@ namespace USignals
 
         void IComputedSignal.EnsureHasDependencies()
         {
-            if (_dependencies.Count == 0)
+            if ((_pendingDependencies ?? _dependencies).Count == 0)
             {
                 throw new InvalidOperationException("Computed signal must depend on at least one signal");
             }
+        }
+
+        bool IDependencyGraphNode.DependsOn(ISignal target, HashSet<ISignal> visited)
+        {
+            if (target == null || !visited.Add(this))
+            {
+                return false;
+            }
+
+            foreach (var dependency in _dependencies)
+            {
+                if (ReferenceEquals(dependency, target))
+                {
+                    return true;
+                }
+
+                if (dependency is IDependencyGraphNode dependencyNode &&
+                    dependencyNode.DependsOn(target, visited))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private void ReplaceDependencies(HashSet<ISignal> nextDependencies)
+        {
+            foreach (var dependency in _dependencies)
+            {
+                if (!nextDependencies.Contains(dependency))
+                {
+                    dependency.OnUpdated -= Recompute;
+                }
+            }
+
+            foreach (var dependency in nextDependencies)
+            {
+                if (_dependencies.Add(dependency))
+                {
+                    dependency.OnUpdated += Recompute;
+                }
+            }
+
+            _dependencies.RemoveWhere(dependency => !nextDependencies.Contains(dependency));
+        }
+
+        private (T finalValue, HashSet<ISignal> dependencies) Evaluate(Func<T> computeFunc, bool trackingDependencies)
+        {
+            bool startedDependencyTracking = false;
+            _pendingDependencies = trackingDependencies ? new HashSet<ISignal>() : null;
+
+            try
+            {
+                _isEvaluating = true;
+
+                if (trackingDependencies)
+                {
+                    SignalDependencyTracker.Begin(this);
+                    startedDependencyTracking = true;
+                }
+
+                var finalValue = computeFunc();
+
+                if (trackingDependencies)
+                {
+                    EnsureHasDependencies();
+                }
+
+                return (finalValue, _pendingDependencies);
+            }
+            finally
+            {
+                if (startedDependencyTracking)
+                {
+                    SignalDependencyTracker.End();
+                }
+
+                _pendingDependencies = null;
+                _isEvaluating = false;
+            }
+        }
+
+        private void ApplyEvaluation(T finalValue, HashSet<ISignal> dependencies)
+        {
+            if (dependencies != null)
+            {
+                ReplaceDependencies(dependencies);
+            }
+
+            bool isDifferent = !EqualityComparer<T>.Default.Equals(_value, finalValue);
+            _value = finalValue;
+
+            OnUpdated?.Invoke();
+            if (isDifferent) OnChanged?.Invoke();
         }
 
         private void ClearDependencies()
