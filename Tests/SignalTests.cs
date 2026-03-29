@@ -124,9 +124,36 @@ public class SignalTests
         var computedSignal = new Signal<int>(() => signal.Value + 1);
 
         computedSignal.Dispose();
+        computedSignal.Dispose();
 
         Assert.DoesNotThrow(() => signal.Value = 2);
         Assert.AreEqual(2, signal.Value);
+    }
+
+    [Test]
+    public void Signal_Dispose_RejectsFurtherUse()
+    {
+        var signal = new Signal<int>(1);
+
+        signal.Dispose();
+
+        Assert.Throws<ObjectDisposedException>(() => _ = signal.Value);
+        Assert.Throws<ObjectDisposedException>(() => signal.Value = 2);
+        Assert.Throws<ObjectDisposedException>(() => signal.Refresh());
+    }
+
+    [Test]
+    public void ComputedSignal_Dispose_RejectsFurtherUse()
+    {
+        var dependency = new Signal<int>(1);
+        var computedSignal = new Signal<int>(() => dependency.Value + 1);
+
+        computedSignal.Dispose();
+
+        Assert.Throws<ObjectDisposedException>(() => _ = computedSignal.Value);
+        Assert.Throws<ObjectDisposedException>(() => computedSignal.UpdateCompute(() => dependency.Value + 2));
+        Assert.Throws<ObjectDisposedException>(() => computedSignal.Refresh());
+        Assert.DoesNotThrow(() => dependency.Value = 2);
     }
 
     [Test]

@@ -53,6 +53,7 @@ namespace USignals
 
         private T _value;
         private bool _isEvaluating = false;
+        private bool _isDisposed = false;
         private Func<T> _computeFunc;
         private readonly HashSet<ISignal> _dependencies = new();
         private HashSet<ISignal> _pendingDependencies;
@@ -74,11 +75,14 @@ namespace USignals
         {
             get
             {
+                ThrowIfDisposed();
                 SignalDependencyTracker.TrackDependency(this);
                 return _value;
             }
             set
             {
+                ThrowIfDisposed();
+
                 if (_computeFunc != null)
                 {
                     throw new InvalidOperationException("Cannot set value on a computed signal");
@@ -137,6 +141,11 @@ namespace USignals
         /// </summary>
         private void Recompute()
         {
+            if (_isDisposed)
+            {
+                return;
+            }
+
             Recompute(_computeFunc);
         }
 
@@ -146,6 +155,11 @@ namespace USignals
         /// <param name="computeFunc">The function that computes the value of the signal.</param>
         private void Recompute(Func<T> computeFunc)
         {
+            if (_isDisposed)
+            {
+                return;
+            }
+
             if (computeFunc == null)
             {
                 throw new ArgumentNullException(nameof(computeFunc));
@@ -160,6 +174,7 @@ namespace USignals
         /// </summary>
         public void Refresh()
         {
+            ThrowIfDisposed();
             OnUpdated?.Invoke();
         }
 
@@ -169,6 +184,8 @@ namespace USignals
         /// <param name="computeFunc">The new function that computes the value of the signal.</param>
         public void UpdateCompute(Func<T> computeFunc)
         {
+            ThrowIfDisposed();
+
             if (_computeFunc == null)
             {
                 throw new InvalidOperationException("Cannot update compute function on a non-computed signal");
@@ -185,23 +202,22 @@ namespace USignals
         }
 
         /// <summary>
-        /// Destructor
-        /// </summary>
-        ~Signal()
-        {
-            Dispose();
-        }
-
-        /// <summary>
         /// Dispose the signal and clean dependencies.
         /// </summary>
         public void Dispose()
         {
+            if (_isDisposed)
+            {
+                return;
+            }
+
             ClearDependencies();
             OnUpdated = null;
             OnChanged = null;
             _pendingDependencies = null;
+            _computeFunc = null;
             _value = default;
+            _isDisposed = true;
         }
 
         void IComputedSignal.RegisterDependency(ISignal dependency)
@@ -346,6 +362,14 @@ namespace USignals
         private void EnsureHasDependencies()
         {
             ((IComputedSignal)this).EnsureHasDependencies();
+        }
+
+        private void ThrowIfDisposed()
+        {
+            if (_isDisposed)
+            {
+                throw new ObjectDisposedException(nameof(Signal<T>));
+            }
         }
     }
 }
