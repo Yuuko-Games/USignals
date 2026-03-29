@@ -1,7 +1,10 @@
 {
-    "name": "USignals",
+    "name": "USignals.Utils",
     "rootNamespace": "USignals",
-    "references": [],
+    "references": [
+        "USignals",
+        "Unity.TextMeshPro"
+    ],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,

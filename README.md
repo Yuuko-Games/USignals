@@ -15,7 +15,7 @@ https://github.com/Yuuko-Games/USignals.git
 To use this package, you need to know the two types of signals that are available:
 
 - `Signal<T>(value)`: A signal that holds a value of type `T`.
-- `Signal<T>(func, signals)`: A signal that holds a value of type `T` that is calculated by a function that depends on other signals.
+- `Signal<T>(func)`: A signal that holds a value of type `T` that is calculated by a function that depends on other signals.
 
 ## Basic example code
 
@@ -26,8 +26,8 @@ var signalB = new Signal<int>(10);
 Debug.Log($"Initial signalA value: {signalA.Value}");
 Debug.Log($"Initial signalB value: {signalB.Value}");
 
-var signalC = new Signal<int>(() => signalA.Value + signalB.Value, signalA, signalB);
-var signalD = new Signal<int>(() => signalC.Value * 2, signalC);
+var signalC = new Signal<int>(() => signalA.Value + signalB.Value);
+var signalD = new Signal<int>(() => signalC.Value * 2);
 
 Debug.Log($"Initial signalC value: {signalB.Value}"); // 15
 Debug.Log($"Initial signalD value: {signalD.Value}"); // 30
@@ -59,7 +59,103 @@ private void Awake()
 
 private void Start()
 {
-    // Use it to subscribe to the OnChanged event, to ensure that the signals are ready
+    // Use it to subscribe to OnUpdated/OnChanged events, to ensure that the signals are ready
+}
+```
+
+## Real project usage examples
+
+These are practical patterns you can copy into real Unity projects.
+
+### UI state (health + death banner)
+
+```csharp
+public class PlayerHealth : MonoBehaviour
+{
+    public readonly Signal<int> health = new(100);
+    public Signal<bool> isDead;
+
+    private void Awake()
+    {
+        isDead = new Signal<bool>(() => health.Value <= 0);
+    }
+
+    private void Start()
+    {
+        health.OnChanged += () => healthText.text = $"{health.Value}";
+        isDead.OnChanged += () => deadBanner.SetActive(isDead.Value);
+    }
+}
+```
+
+### Inventory count + capacity warning
+
+```csharp
+public class Inventory : MonoBehaviour
+{
+    public readonly Signal<int> itemCount = new(0);
+    public readonly Signal<int> capacity = new(20);
+    public Signal<bool> isFull;
+
+    private void Awake()
+    {
+        isFull = new Signal<bool>(() => itemCount.Value >= capacity.Value);
+    }
+}
+```
+
+### Settings menu: master volume affects SFX/music
+
+```csharp
+public class AudioSettingsModel : MonoBehaviour
+{
+    public readonly Signal<float> master = new(1f);
+    public readonly Signal<float> sfx = new(0.8f);
+    public readonly Signal<float> music = new(0.6f);
+
+    public Signal<float> sfxFinal;
+    public Signal<float> musicFinal;
+
+    private void Awake()
+    {
+        sfxFinal = new Signal<float>(() => master.Value * sfx.Value);
+        musicFinal = new Signal<float>(() => master.Value * music.Value);
+    }
+}
+```
+
+### Quest progression and UI
+
+```csharp
+public class QuestState : MonoBehaviour
+{
+    public readonly Signal<int> completedSteps = new(0);
+    public readonly Signal<int> totalSteps = new(5);
+    public Signal<float> progress;
+
+    private void Awake()
+    {
+        progress = new Signal<float>(() =>
+            totalSteps.Value == 0 ? 0f : (float)completedSteps.Value / totalSteps.Value);
+    }
+}
+```
+
+### Combat: damage output from stats + buffs
+
+```csharp
+public class CombatStats : MonoBehaviour
+{
+    public readonly Signal<int> baseDamage = new(10);
+    public readonly Signal<float> critMultiplier = new(1.5f);
+    public readonly Signal<bool> isCrit = new(false);
+    public Signal<float> currentDamage;
+
+    private void Awake()
+    {
+        currentDamage = new Signal<float>(() =>
+            baseDamage.Value * (isCrit.Value ? critMultiplier.Value : 1f));
+    }
 }
 ```
 
@@ -84,7 +180,7 @@ public class PlayerHealth : MonoBehaviour
     private void Awake()
     {
         // Use to initialize the signals
-        isDead = new Signal<bool>(() => health.Value <= 0, health);
+        isDead = new Signal<bool>(() => health.Value <= 0);
     }
 
     // Imagine this is a damage event
@@ -147,7 +243,7 @@ signal.OnChanged += () => {
 - On MonoBehaviour scripts
   - DO use the signals as `readonly` variables when working on MonoBehaviour scripts.
   - DO initizalize the signals in the `Awake` method.
-  - DO subscribe to the `OnChanged` event in the `Start` method.
+  - DO subscribe to the `OnUpdated` or `OnChanged` event in the `Start` method.
 
 ## License
 
